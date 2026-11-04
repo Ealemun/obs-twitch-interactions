@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "channel": "ma_chaine",
+  "destinations": [
+    {
+      "name": "Logo en haut",
+      "scene": "Scène principale",
+      "source": "Logo",
+      "x": 687.0,
+      "y": 0.0,
+      "width": 461.0,
+      "height": 461.0,
+      "rotation": 0.0,
+      "scale_x": 0.9,
+      "scale_y": 0.9,
+      "switch_scene": true
+    },
+    {
+      "name": "Logo en bas",
+      "scene": "Scène principale",
+      "source": "Logo",
+      "x": 684.0,
+      "y": 619.0,
+      "width": 461.0,
+      "height": 461.0,
+      "rotation": 0.0,
+      "scale_x": 0.9,
+      "scale_y": 0.9,
+      "switch_scene": false
+    },
+    {
+      "name": "Compte à rebours plein écran",
+      "scene": "Pause",
+      "source": "Compte à rebours",
+      "x": 68.0,
+      "y": 147.0,
+      "width": 1828.0,
+      "height": 264.0,
+      "rotation": 0.0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "switch_scene": true
+    }
+  ],
+  "behaviors": [
+    {
+      "name": "Logo haut",
+      "enabled": true,
+      "keywords": ["haut", "up"],
+      "threshold": 5,
+      "window_seconds": 10.0,
+      "count_mode": "combined",
+      "trigger_mode": "once",
+      "roles": "everyone",
+      "users": [],
+      "max_per_message": 1,
+      "destination": "Logo en haut"
+    },
+    {
+      "name": "Logo bas",
+      "enabled": true,
+      "keywords": ["bas", "down"],
+      "threshold": 5,
+      "window_seconds": 10.0,
+      "count_mode": "combined",
+      "trigger_mode": "once",
+      "roles": "everyone",
+      "users": [],
+      "max_per_message": 1,
+      "destination": "Logo en bas"
+    },
+    {
+      "name": "Pause (modos)",
+      "enabled": true,
+      "keywords": ["!pause"],
+      "threshold": 1,
+      "window_seconds": 1.0,
+      "count_mode": "combined",
+      "trigger_mode": "repeat",
+      "roles": "mods_broadcaster",
+      "users": [],
+      "max_per_message": 0,
+      "destination": "Compte à rebours plein écran"
+    }
+  ]
+}
