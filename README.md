@@ -38,7 +38,8 @@ T secondes, appliquer telle destination ».
 | Occurrences max par message | plafond compté pour un même message (0 = illimité), évite qu'un seul `lol lol lol lol lol` déclenche tout |
 | Mode de comptage | *combiné* : un compteur pour tous les mots-clés ; *individuel* : un par mot-clé |
 | Mode de déclenchement | *unique* : se déclenche une fois puis attend que le compteur retombe sous le seuil ; *répétitif* : remet le compteur à zéro à chaque déclenchement |
-| Qui peut déclencher | tout le monde, modérateurs, broadcaster, VIP ou une liste de pseudos |
+| Qui peut déclencher | cases combinables : tout le monde, broadcaster, modérateurs, VIP, abonnés (founders inclus) ; un viewer est autorisé s'il a au moins un des rôles cochés |
+| Pseudos autorisés en plus | pseudos qui peuvent déclencher même sans avoir un rôle coché |
 
 **Import / export JSON** : sauvegarde ou restauration de toute la configuration.
 Un exemple commenté se trouve dans `examples/config.example.json`.

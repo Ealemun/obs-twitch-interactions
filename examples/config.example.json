@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "channel": "ma_chaine",
   "destinations": [
     {
@@ -46,12 +46,17 @@
     {
       "name": "Logo haut",
       "enabled": true,
-      "keywords": ["haut", "up"],
+      "keywords": [
+        "haut",
+        "up"
+      ],
       "threshold": 5,
       "window_seconds": 10.0,
       "count_mode": "combined",
       "trigger_mode": "once",
-      "roles": "everyone",
+      "roles": [
+        "everyone"
+      ],
       "users": [],
       "max_per_message": 1,
       "destination": "Logo en haut"
@@ -59,25 +64,36 @@
     {
       "name": "Logo bas",
       "enabled": true,
-      "keywords": ["bas", "down"],
+      "keywords": [
+        "bas",
+        "down"
+      ],
       "threshold": 5,
       "window_seconds": 10.0,
       "count_mode": "combined",
       "trigger_mode": "once",
-      "roles": "everyone",
+      "roles": [
+        "everyone"
+      ],
       "users": [],
       "max_per_message": 1,
       "destination": "Logo en bas"
     },
     {
-      "name": "Pause (modos)",
+      "name": "Pause (staff)",
       "enabled": true,
-      "keywords": ["!pause"],
+      "keywords": [
+        "!pause"
+      ],
       "threshold": 1,
       "window_seconds": 1.0,
       "count_mode": "combined",
       "trigger_mode": "repeat",
-      "roles": "mods_broadcaster",
+      "roles": [
+        "broadcaster",
+        "moderator",
+        "vip"
+      ],
       "users": [],
       "max_per_message": 0,
       "destination": "Compte à rebours plein écran"

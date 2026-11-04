@@ -141,7 +141,8 @@ class EngineTests(unittest.TestCase):
         e = self.engine(behavior(enabled=False, threshold=1))
         self.assertFalse(self.feed(e, "lol"))
 
-    def test_roles(self):
+    def test_legacy_roles(self):
+        # Anciennes valeurs (chaîne unique) : même comportement qu'avant la v0.4.
         cases = {
             "moderators": ({"moderator"}, {"vip"}),
             "broadcaster": ({"broadcaster"}, {"moderator"}),
@@ -156,6 +157,26 @@ class EngineTests(unittest.TestCase):
         e = self.engine(behavior(roles="custom", users="@Alice, bob", threshold=1))
         self.assertTrue(self.feed(e, "lol", user="alice"))
         self.assertFalse(self.feed(e, "lol", user="carol"))
+
+    def test_combined_roles(self):
+        # Broadcaster + modos + VIP ensemble : chacun suffit, un simple viewer non.
+        b = behavior(roles=["broadcaster", "moderator", "vip"], threshold=1)
+        for badges in ({"broadcaster"}, {"moderator"}, {"vip"}):
+            self.assertTrue(self.feed(self.engine(b), "lol", badges=badges), badges)
+        self.assertFalse(self.feed(self.engine(b), "lol", badges={"subscriber"}))
+        self.assertFalse(self.feed(self.engine(b), "lol"))
+
+    def test_roles_plus_users(self):
+        # Les pseudos listés s'ajoutent aux rôles cochés.
+        # (Un moteur neuf par cas : en mode « unique », un déclenchement désarme.)
+        b = behavior(roles=["vip"], users="alice", threshold=1)
+        self.assertTrue(self.feed(self.engine(b), "lol", user="alice"))
+        self.assertTrue(self.feed(self.engine(b), "lol", user="zoe", badges={"vip"}))
+        self.assertFalse(self.feed(self.engine(b), "lol", user="carol"))
+
+    def test_subscriber_includes_founder(self):
+        e = self.engine(behavior(roles=["subscriber"], threshold=1))
+        self.assertTrue(self.feed(e, "lol", badges={"founder"}))
 
     def test_unauthorized_not_counted(self):
         e = self.engine(behavior(roles="moderators", threshold=2))
@@ -194,6 +215,21 @@ class ConfigTests(unittest.TestCase):
         d, _ = m.normalize_destination({"name": "A", "scene": "S", "source": "X", "width": 10, "height": 10,
                                         "switch_scene": False})
         self.assertFalse(d["switch_scene"])
+
+    def test_normalize_roles(self):
+        self.assertEqual(m.normalize_roles("mods_broadcaster"), (["broadcaster", "moderator"], []))
+        self.assertEqual(m.normalize_roles(["vip", "broadcaster", "vip"]), (["broadcaster", "vip"], []))
+        self.assertEqual(m.normalize_roles("vip, moderator"), (["moderator", "vip"], []))
+        self.assertEqual(m.normalize_roles(["everyone", "vip"]), (["everyone"], []))
+        self.assertEqual(m.normalize_roles(None), (["everyone"], []))
+        roles, errs = m.normalize_roles(["vip", "admin"])
+        self.assertEqual(roles, ["vip"])
+        self.assertTrue(errs)
+
+    def test_nobody_can_trigger_is_an_error(self):
+        _, errs = m.normalize_behavior(dict(name="b", keywords="x", threshold=1, window_seconds=1,
+                                            roles=[], users=""))
+        self.assertTrue(any("personne" in e for e in errs))
 
     def test_max_per_message_clamped(self):
         self.assertEqual(behavior(max_per_message=-5)["max_per_message"], 0)

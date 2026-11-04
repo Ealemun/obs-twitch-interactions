@@ -43,8 +43,10 @@ try:
 except ImportError:
     obs = None
 
-SCRIPT_VERSION = "0.3.1"
-CONFIG_VERSION = 1
+SCRIPT_VERSION = "0.4.0"
+# Version du format JSON. 2 : « roles » devient une liste (les fichiers en
+# version 1, avec une seule chaîne, restent lisibles : voir normalize_roles).
+CONFIG_VERSION = 2
 
 
 # ---------------------------------------------------------------------------
@@ -73,14 +75,37 @@ def log(level, msg):
 # Toutes les listes de choix sont des couples (valeur_interne, libellé_affiché).
 # La valeur interne est celle stockée dans le JSON ; le libellé est pour l'UI.
 
+# Rôles combinables : un comportement stocke une LISTE de ces clés. Chaque rôle
+# est une case à cocher dans l'interface. « everyone » rend les autres inutiles.
 ROLE_CHOICES = [
     ("everyone", "Tout le monde"),
-    ("moderators", "Modérateurs uniquement"),
-    ("broadcaster", "Broadcaster uniquement"),
-    ("mods_broadcaster", "Modérateurs et broadcaster"),
-    ("vip", "VIP uniquement"),
-    ("custom", "Liste personnalisée de pseudos"),
+    ("broadcaster", "Broadcaster"),
+    ("moderator", "Modérateurs"),
+    ("vip", "VIP"),
+    ("subscriber", "Abonnés"),
 ]
+
+# Badges Twitch qui donnent chaque rôle. Les « founders » (premiers abonnés
+# d'une chaîne) ont le badge « founder » à la place de « subscriber ».
+ROLE_BADGES = {
+    "broadcaster": {"broadcaster"},
+    "moderator": {"moderator"},
+    "vip": {"vip"},
+    "subscriber": {"subscriber", "founder"},
+}
+
+# Anciennes valeurs (v0.3 et avant : un seul choix dans une liste déroulante)
+# converties vers la liste de rôles équivalente. « custom » = aucun rôle, seuls
+# les pseudos listés peuvent déclencher.
+_LEGACY_ROLES = {
+    "everyone": ["everyone"],
+    "moderators": ["moderator"],
+    "broadcaster": ["broadcaster"],
+    "mods_broadcaster": ["broadcaster", "moderator"],
+    "vip": ["vip"],
+    "custom": [],
+}
+
 COUNT_CHOICES = [
     ("combined", "Combiné (un seul compteur)"),
     ("individual", "Individuel (un compteur par mot-clé)"),
@@ -144,6 +169,31 @@ def _num(value, default, cast=float):
         return default
 
 
+def normalize_roles(value):
+    """Convertit la valeur « roles » d'un comportement en liste de clés de rôle.
+
+    Accepte :
+      - une liste (format actuel)            : ['broadcaster', 'vip']
+      - une chaîne d'ancien format           : 'mods_broadcaster'
+      - une chaîne de rôles séparés par ','  : 'broadcaster, vip'
+
+    Retourne (rôles, [erreurs]). Les rôles sont dédoublonnés et rangés dans
+    l'ordre de ROLE_CHOICES. Si « everyone » est présent, on ne garde que lui.
+    """
+    if value is None:
+        return ["everyone"], []
+    if isinstance(value, str) and value.strip() in _LEGACY_ROLES:
+        items = _LEGACY_ROLES[value.strip()]
+    else:
+        items = split_list(value)
+
+    errors = [("rôle inconnu: %s" % r) for r in items if r not in _ROLE_KEYS]
+    roles = [k for k, _ in ROLE_CHOICES if k in items]
+    if "everyone" in roles:
+        roles = ["everyone"]
+    return roles, errors
+
+
 def normalize_destination(raw):
     """Valide une destination brute (dict). Retourne (destination | None, [erreurs]).
 
@@ -201,7 +251,8 @@ def normalize_behavior(raw):
       window_seconds  : fenêtre glissante en secondes (> 0)
       count_mode      : 'combined' ou 'individual' (voir COUNT_CHOICES)
       trigger_mode    : 'once' ou 'repeat' (voir TRIGGER_CHOICES)
-      roles, users    : qui a le droit de déclencher (users : pseudos en minuscules)
+      roles           : liste de rôles autorisés (voir ROLE_CHOICES), combinables
+      users           : pseudos autorisés EN PLUS des rôles (minuscules, sans @)
       max_per_message : plafond d'occurrences comptées par message (0 = illimité)
       destination     : nom de la destination à appliquer
     """
@@ -226,13 +277,13 @@ def normalize_behavior(raw):
     trigger_mode = str(raw.get("trigger_mode", "once"))
     if trigger_mode not in _TRIGGER_KEYS:
         errors.append("mode de déclenchement inconnu: %s" % trigger_mode)
-    roles = str(raw.get("roles", "everyone"))
-    if roles not in _ROLE_KEYS:
-        errors.append("rôle inconnu: %s" % roles)
+    roles, role_errors = normalize_roles(raw.get("roles", "everyone"))
+    errors.extend(role_errors)
     # Les pseudos sont stockés en minuscules, sans le @ éventuel, pour la comparaison.
     users = [u.lstrip("@").lower() for u in split_list(raw.get("users"))]
-    if roles == "custom" and not users:
-        errors.append("liste de pseudos vide alors que le rôle est « personnalisé » (%s)" % name)
+    # Un comportement que personne ne peut déclencher est forcément une erreur.
+    if not roles and not users:
+        errors.append("aucun rôle coché et aucun pseudo : personne ne peut déclencher (%s)" % name)
     if errors:
         return None, errors
     return {
@@ -304,22 +355,20 @@ ChatMessage = namedtuple("ChatMessage", "user display_name text badges channel")
 
 
 def is_authorized(behavior, msg):
-    """Filtre de rôle, basé uniquement sur les badges/pseudo fournis par Twitch."""
-    role = behavior["roles"]
-    badges = msg.badges
-    if role == "everyone":
+    """Filtre de rôle, basé uniquement sur les badges/pseudo fournis par Twitch.
+
+    L'auteur est autorisé s'il remplit AU MOINS UNE condition :
+      - « everyone » est coché ;
+      - il possède un badge correspondant à l'un des rôles cochés ;
+      - son pseudo figure dans la liste des pseudos autorisés.
+    """
+    roles = behavior["roles"]
+    if "everyone" in roles:
         return True
-    if role == "moderators":
-        return "moderator" in badges
-    if role == "broadcaster":
-        return "broadcaster" in badges
-    if role == "mods_broadcaster":
-        return "moderator" in badges or "broadcaster" in badges
-    if role == "vip":
-        return "vip" in badges
-    if role == "custom":
-        return msg.user.lower() in behavior["users"]
-    return False
+    for role in roles:
+        if msg.badges & ROLE_BADGES.get(role, set()):
+            return True
+    return msg.user.lower() in behavior["users"]
 
 
 class BehaviorEngine:
@@ -980,9 +1029,25 @@ def _run_trigger(behavior, msg):
 _UI_DEFAULTS = {
     "ui_name": "", "ui_keywords": "", "ui_users": "",
     "ui_threshold": 5, "ui_window": 10, "ui_max_per_msg": 0,
-    "ui_count_mode": "combined", "ui_trigger_mode": "once", "ui_roles": "everyone",
+    "ui_count_mode": "combined", "ui_trigger_mode": "once", "ui_roles": ["everyone"],
     "ui_dest": "", "ui_enabled": True,
 }
+
+
+def _role_key(role):
+    """Nom du paramètre OBS de la case à cocher d'un rôle (ex. 'ui_role_vip')."""
+    return "ui_role_" + role
+
+
+def _set_role_checkboxes(roles):
+    """Coche exactement les rôles de la liste `roles` dans le formulaire."""
+    for role, _ in ROLE_CHOICES:
+        obs.obs_data_set_bool(_settings, _role_key(role), role in roles)
+
+
+def _get_role_checkboxes():
+    """Liste des rôles actuellement cochés dans le formulaire."""
+    return [role for role, _ in ROLE_CHOICES if obs.obs_data_get_bool(_settings, _role_key(role))]
 
 
 def _load_behavior_into_ui(name):
@@ -998,7 +1063,7 @@ def _load_behavior_into_ui(name):
         obs.obs_data_set_int(_settings, "ui_max_per_msg", d["ui_max_per_msg"])
         _set_str("ui_count_mode", d["ui_count_mode"])
         _set_str("ui_trigger_mode", d["ui_trigger_mode"])
-        _set_str("ui_roles", d["ui_roles"])
+        _set_role_checkboxes(d["ui_roles"])
         _set_str("ui_dest", d["ui_dest"])
         obs.obs_data_set_bool(_settings, "ui_enabled", d["ui_enabled"])
         return
@@ -1011,7 +1076,7 @@ def _load_behavior_into_ui(name):
     obs.obs_data_set_int(_settings, "ui_max_per_msg", b["max_per_message"])
     _set_str("ui_count_mode", b["count_mode"])
     _set_str("ui_trigger_mode", b["trigger_mode"])
-    _set_str("ui_roles", b["roles"])
+    _set_role_checkboxes(b["roles"])
     _set_str("ui_dest", b["destination"])
     obs.obs_data_set_bool(_settings, "ui_enabled", b["enabled"])
 
@@ -1080,7 +1145,7 @@ def _on_save_behavior(props, prop):
         "max_per_message": obs.obs_data_get_int(_settings, "ui_max_per_msg"),
         "count_mode": _get_str("ui_count_mode"),
         "trigger_mode": _get_str("ui_trigger_mode"),
-        "roles": _get_str("ui_roles"),
+        "roles": _get_role_checkboxes(),
         "users": _get_str("ui_users"),
         "destination": _get_str("ui_dest"),
     }
@@ -1316,7 +1381,9 @@ def script_defaults(settings):
     obs.obs_data_set_default_bool(settings, "ui_enabled", True)
     obs.obs_data_set_default_string(settings, "ui_count_mode", "combined")
     obs.obs_data_set_default_string(settings, "ui_trigger_mode", "once")
-    obs.obs_data_set_default_string(settings, "ui_roles", "everyone")
+    # Cases de rôles : seule « Tout le monde » est cochée par défaut.
+    for role, _ in ROLE_CHOICES:
+        obs.obs_data_set_default_bool(settings, _role_key(role), role == "everyone")
 
 
 def script_properties():
@@ -1367,9 +1434,15 @@ def script_properties():
     _add_choices(p, COUNT_CHOICES)
     p = obs.obs_properties_add_list(g, "ui_trigger_mode", "Mode de déclenchement", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
     _add_choices(p, TRIGGER_CHOICES)
-    p = obs.obs_properties_add_list(g, "ui_roles", "Qui peut déclencher", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
-    _add_choices(p, ROLE_CHOICES)
-    obs.obs_properties_add_text(g, "ui_users", "Pseudos autorisés (rôle personnalisé)", obs.OBS_TEXT_DEFAULT)
+    # Qui peut déclencher : une case par rôle, combinables entre elles. Un viewer
+    # est autorisé s'il a AU MOINS UN des rôles cochés ou s'il est dans la liste.
+    # (Pas de sous-groupe : les groupes imbriqués ne sont pas fiables selon les
+    # versions d'OBS. Un intitulé suivi des cases fait le même effet.)
+    obs.obs_properties_add_text(g, "lbl_roles", "<b>Qui peut déclencher</b> (au moins un rôle coché "
+                                "ou pseudo listé)", obs.OBS_TEXT_INFO)
+    for role, label in ROLE_CHOICES:
+        obs.obs_properties_add_bool(g, _role_key(role), label)
+    obs.obs_properties_add_text(g, "ui_users", "Pseudos autorisés en plus", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_list(g, "ui_dest", "Destination à appliquer", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
     obs.obs_properties_add_button(g, "btn_save_beh", "Enregistrer le comportement", _on_save_behavior)
     obs.obs_properties_add_button(g, "btn_toggle_beh", "Activer / désactiver le comportement sélectionné", _on_toggle_behavior)
