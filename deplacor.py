@@ -1286,10 +1286,9 @@ def script_description():
     """
     return (
         "<h3>Deplaçor <small>v%(version)s</small></h3>"
-        # Une phrase pour dire ce que fait le script, avec un exemple concret.
+        # Une phrase pour dire ce que fait le script.
         "<p>Vos viewers font bouger vos sources depuis le chat. Quand un mot-clé est "
-        "répété assez de fois (par exemple <i>haut</i> 5 fois en 10 s), une source "
-        "se déplace, change de taille ou de scène.</p>"
+        "répété assez de fois, une source se déplace, change de taille ou de scène.</p>"
         # Mode d'emploi : dans l'ordre où on configure, pas dans l'ordre des blocs.
         "<ol>"
         "<li><b>Destinations</b> : placez une source comme vous voulez dans OBS, "
