@@ -43,7 +43,7 @@ try:
 except ImportError:
     obs = None
 
-SCRIPT_VERSION = "0.3.0"
+SCRIPT_VERSION = "0.3.1"
 CONFIG_VERSION = 1
 
 
@@ -1275,13 +1275,34 @@ def _status_text():
 # OBS appelle ces fonctions par leur nom : script_description, script_defaults,
 # script_properties, script_load, script_update, script_unload.
 
+REPO_URL = "https://github.com/Ealemun/obs-twitch-interactions"
+
+
 def script_description():
+    """Texte affiché en haut du panneau du script.
+
+    OBS l'affiche avec le moteur de texte riche de Qt : seul un sous-ensemble de
+    HTML est reconnu (titres, paragraphes, listes, gras, liens, <small>).
+    """
     return (
-        "<b>Deplaçor — Interactions Twitch</b> v%s<br>"
-        "Lit le chat Twitch (anonyme, lecture seule, sans jeton) et déplace/redimensionne "
-        "des sources OBS selon les mots-clés écrits par les viewers.<br>"
-        "1) Enregistrez des destinations. 2) Créez des comportements. 3) Démarrez la lecture."
-        % SCRIPT_VERSION
+        "<h3>Deplaçor <small>v%(version)s</small></h3>"
+        # Une phrase pour dire ce que fait le script, avec un exemple concret.
+        "<p>Vos viewers font bouger vos sources depuis le chat. Quand un mot-clé est "
+        "répété assez de fois (par exemple <i>haut</i> 5 fois en 10 s), une source "
+        "se déplace, change de taille ou de scène.</p>"
+        # Mode d'emploi : dans l'ordre où on configure, pas dans l'ordre des blocs.
+        "<ol>"
+        "<li><b>Destinations</b> : placez une source comme vous voulez dans OBS, "
+        "puis enregistrez sa position sous un nom.</li>"
+        "<li><b>Comportements</b> : choisissez les mots-clés, le seuil, qui peut "
+        "déclencher et la destination à appliquer.</li>"
+        "<li><b>Connexion au chat</b> : entrez le nom de la chaîne et lancez la lecture.</li>"
+        "</ol>"
+        # Rassurer sur la sécurité, puis renvoyer vers la doc complète.
+        "<p><small>Connexion anonyme en lecture seule : aucun compte, aucun jeton, "
+        "rien n'est jamais écrit dans le chat. "
+        "<a href=\"%(url)s\">Documentation et mises à jour</a></small></p>"
+        % {"version": SCRIPT_VERSION, "url": REPO_URL}
     )
 
 
